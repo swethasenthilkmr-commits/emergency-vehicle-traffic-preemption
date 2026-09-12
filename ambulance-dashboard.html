@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🚦 Traffic Control - Ambulance Override</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .intersection {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            margin: 30px 0;
+        }
+        
+        .lane {
+            text-align: center;
+        }
+        
+        .lane h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .light {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin: 10px auto;
+            border: 3px solid #333;
+            transition: all 0.3s;
+            opacity: 0.3;
+        }
+        
+        .light.active {
+            opacity: 1;
+            box-shadow: 0 0 30px currentColor;
+        }
+        
+        .red { background: #ff4444; }
+        .yellow { background: #ffbb33; }
+        .green { background: #00C851; }
+        
+        .status-banner {
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .normal {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .ambulance {
+            background: #f44336;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; transform: scale(1.02); }
+            100% { opacity: 1; }
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+        }
+        
+        button {
+            padding: 20px;
+            font-size: 1.2em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            color: white;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-ambulance1 {
+            background: #2196F3;
+        }
+        
+        .btn-ambulance2 {
+            background: #FF9800;
+        }
+        
+        .btn-release {
+            background: #4CAF50;
+        }
+        
+        .btn-release:disabled {
+            background: #ccc;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 1.1em;
+        }
+        
+        .ip-address {
+            background: #333;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚦 EMERGENCY VEHICLE CONTROL</h1>
+        
+        <div class="card">
+            <div class="ip-address" id="espIP">
+                Connecting to ESP32...
+            </div>
+            
+            <!-- Status Banner -->
+            <div id="statusBanner" class="status-banner normal">
+                ✅ NORMAL OPERATION
+            </div>
+            
+            <!-- Traffic Lights Display -->
+            <div class="intersection">
+                <!-- Lane 1 -->
+                <div class="lane">
+                    <h2>LANE 1</h2>
+                    <div id="l1r" class="light red"></div>
+                    <div id="l1y" class="light yellow"></div>
+                    <div id="l1g" class="light green"></div>
+                </div>
+                
+                <!-- Lane 2 -->
+                <div class="lane">
+                    <h2>LANE 2</h2>
+                    <div id="l2r" class="light red"></div>
+                    <div id="l2y" class="light yellow"></div>
+                    <div id="l2g" class="light green"></div>
+                </div>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div class="button-grid">
+                <button class="btn-ambulance1" onclick="sendCommand('ambulance', 1)">
+                    🚑 AMBULANCE LANE 1
+                </button>
+                <button class="btn-ambulance2" onclick="sendCommand('ambulance', 2)">
+                    🚑 AMBULANCE LANE 2
+                </button>
+                <button class="btn-release" id="releaseBtn" onclick="sendCommand('release')" disabled>
+                    ✅ RELEASE (Return to Normal)
+                </button>
+            </div>
+            
+            <div class="warning">
+                ⚠️ When you click "Ambulance" - that lane will stay GREEN until you click "RELEASE"
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 style="text-align:center; color:#333;">How It Works</h2>
+            <ol style="font-size:1.1em; line-height:1.8;">
+                <li><strong>Normal Mode:</strong> Lights cycle automatically every 5 seconds</li>
+                <li><strong>Click "Ambulance Lane 1":</strong> Lane 1 goes GREEN and STAYS GREEN</li>
+                <li><strong>Click "Ambulance Lane 2":</strong> Lane 2 goes GREEN and STAYS GREEN</li>
+                <li><strong>Click "RELEASE":</strong> Returns to normal cycling</li>
+                <li><strong>Hardware LEDs</strong> follow the software display exactly</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 🔴🔴🔴 YOUR ESP32 IP ADDRESS - UPDATED! 🔴🔴🔴
+        const ESP_IP = '10.187.244.198';  // ✅ Your actual ESP32 IP
+        
+        let currentMode = 'normal';
+        
+        function updateStatus() {
+            fetch(`http://${ESP_IP}/api/status`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update lights
+                    document.getElementById('l1r').classList.toggle('active', data.l1r);
+                    document.getElementById('l1y').classList.toggle('active', data.l1y);
+                    document.getElementById('l1g').classList.toggle('active', data.l1g);
+                    document.getElementById('l2r').classList.toggle('active', data.l2r);
+                    document.getElementById('l2y').classList.toggle('active', data.l2y);
+                    document.getElementById('l2g').classList.toggle('active', data.l2g);
+                    
+                    // Update status banner
+                    const banner = document.getElementById('statusBanner');
+                    const releaseBtn = document.getElementById('releaseBtn');
+                    
+                    if (data.mode === 'normal') {
+                        banner.className = 'status-banner normal';
+                        banner.innerHTML = '✅ NORMAL OPERATION - Automatic Cycling';
+                        releaseBtn.disabled = true;
+                        currentMode = 'normal';
+                    } else if (data.mode === 'ambulance1') {
+                        banner.className = 'status-banner ambulance';
+                        banner.innerHTML = '🚨 AMBULANCE ON LANE 1 - Green STUCK ON';
+                        releaseBtn.disabled = false;
+                        currentMode = 'ambulance1';
+                    } else if (data.mode === 'ambulance2') {
+                        banner.className = 'status-banner ambulance';
+                        banner.innerHTML = '🚨 AMBULANCE ON LANE 2 - Green STUCK ON';
+                        releaseBtn.disabled = false;
+                        currentMode = 'ambulance2';
+                    }
+                    
+                    document.getElementById('espIP').innerHTML = `✅ Connected to ESP32: ${ESP_IP}`;
+                })
+                .catch(error => {
+                    document.getElementById('espIP').innerHTML = '❌ Cannot connect to ESP32';
+                    console.error('Connection error:', error);
+                });
+        }
+        
+        function sendCommand(command, lane = null) {
+            let url = `http://${ESP_IP}/api/`;
+            
+            if (command === 'ambulance') {
+                url += `ambulance?lane=${lane}`;
+            } else if (command === 'release') {
+                url += 'release';
+            }
+            
+            fetch(url, { method: 'POST' })
+                .then(response => response.text())
+                .then(data => {
+                    console.log('Command sent:', data);
+                    setTimeout(updateStatus, 500);  // Update after command
+                })
+                .catch(error => {
+                    alert('Failed to send command. Check connection.');
+                    console.error('Error:', error);
+                });
+        }
+        
+        // Update every second
+        setInterval(updateStatus, 1000);
+        updateStatus();
+    </script>
+</body>
+</html>

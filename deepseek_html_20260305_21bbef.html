@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚦 TRAFFIC CONTROL - MANUAL GREEN HOLD</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e1e2f 0%, #2a2a40 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 2px;
+        }
+        
+        .warning-banner {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            animation: pulse 1s infinite;
+            display: none;
+            box-shadow: 0 10px 30px rgba(255,0,0,0.3);
+            border: 2px solid #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.9; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 0.9; transform: scale(1); }
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 12px;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .traffic-lights {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        
+        .lane {
+            text-align: center;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 150px;
+        }
+        
+        .lane h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .light {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            margin: 12px auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+            opacity: 0.2;
+            border: 3px solid #333;
+        }
+        
+        .light.active {
+            opacity: 1;
+            box-shadow: 0 0 40px currentColor;
+            animation: glow 1.5s infinite;
+            border-color: white;
+        }
+        
+        @keyframes glow {
+            0% { box-shadow: 0 0 20px currentColor; }
+            50% { box-shadow: 0 0 60px currentColor; }
+            100% { box-shadow: 0 0 20px currentColor; }
+        }
+        
+        .red-light { background: #ff4444; }
+        .yellow-light { background: #ffbb33; }
+        .green-light { background: #00C851; }
+        
+        .esp32-badge {
+            display: inline-block;
+            background: #2c3e50;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 25px;
+            font-family: monospace;
+            font-size: 1.1em;
+            margin-top: 15px;
+        }
+        
+        .map-container {
+            height: 400px;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+            border: 3px solid #667eea;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 25px 0;
+        }
+        
+        .btn {
+            padding: 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .btn:hover:not(:disabled) {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        
+        .btn-green { 
+            background: linear-gradient(135deg, #00C851 0%, #007E33 100%);
+        }
+        .btn-red { 
+            background: linear-gradient(135deg, #ff4444 0%, #CC0000 100%);
+        }
+        .btn-blue { 
+            background: linear-gradient(135deg, #33b5e5 0%, #0099CC 100%);
+        }
+        .btn-purple { 
+            background: linear-gradient(135deg, #aa66cc 0%, #9933CC 100%);
+        }
+        .btn-orange { 
+            background: linear-gradient(135deg, #ff8800 0%, #FF6600 100%);
+        }
+        
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            filter: grayscale(100%);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .stat-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 10px 20px rgba(102,126,234,0.3);
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .gps-info {
+            background: #1a1a1a;
+            color: #0f0;
+            padding: 20px;
+            border-radius: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2em;
+            margin: 15px 0;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 20px rgba(0,255,0,0.2);
+        }
+        
+        .gps-info div {
+            margin: 8px 0;
+            letter-spacing: 1px;
+        }
+        
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            border-radius: 15px;
+            padding: 15px;
+            border: 2px solid #667eea;
+        }
+        
+        .log-entry {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            font-size: 0.95em;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .log-entry .time {
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin: 5px;
+        }
+        
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .badge-info { background: #cce5ff; color: #004085; }
+        
+        .connection-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .connected { background: #00C851; box-shadow: 0 0 10px #00C851; }
+        .disconnected { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+        
+        @media (max-width: 768px) {
+            .button-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚦 TRAFFIC CONTROL - MANUAL GREEN HOLD</h1>
+        
+        <!-- Emergency Banner -->
+        <div id="emergencyBanner" class="warning-banner">
+            🚨 EMERGENCY ACTIVE - LANE <span id="activeLane">1</span> GREEN UNTIL YOU PRESS STOP 🚨
+        </div>
+        
+        <!-- ESP32 Connection Status -->
+        <div style="text-align: right; margin-bottom: 10px;">
+            <span id="connectionStatus" class="badge badge-success">
+                <span id="connectionDot" class="connection-status connected"></span>
+                ESP32: <span id="esp32ip">10.187.244.198</span>
+            </span>
+        </div>
+        
+        <div class="dashboard-grid">
+            <!-- Traffic Lights Card -->
+            <div class="card">
+                <h2>🚦 Live Traffic Status</h2>
+                <div class="traffic-lights">
+                    <!-- Lane 1 -->
+                    <div class="lane">
+                        <h3>LANE 1 (MAIN ST)</h3>
+                        <div id="l1-red" class="light red-light"></div>
+                        <div id="l1-yellow" class="light yellow-light"></div>
+                        <div id="l1-green" class="light green-light"></div>
+                        <div class="esp32-badge">GPIO 26,27,14</div>
+                    </div>
+                    
+                    <!-- Lane 2 -->
+                    <div class="lane">
+                        <h3>LANE 2 (CROSS ST)</h3>
+                        <div id="l2-red" class="light red-light"></div>
+                        <div id="l2-yellow" class="light yellow-light"></div>
+                        <div id="l2-green" class="light green-light"></div>
+                        <div class="esp32-badge">GPIO 25,33,32</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <span id="systemStatus" class="badge badge-success">System Online</span>
+                    <span id="gpsStatus" class="badge badge-warning">GPS: No Data</span>
+                </div>
+            </div>
+            
+            <!-- GPS Card -->
+            <div class="card">
+                <h2>📍 GPS Tracking</h2>
+                <div class="gps-info">
+                    <div>📡 Latitude: <span id="gpsLat">12.971600</span></div>
+                    <div>📡 Longitude: <span id="gpsLng">77.594600</span></div>
+                    <div>🚑 Vehicle ID: AMB-001</div>
+                    <div>⏱️ Last Update: <span id="gpsTime">--:--:--</span></div>
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge badge-info">Simulated GPS (for demo)</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Map Card -->
+        <div class="card">
+            <h2>🗺️ Live Tracking Map</h2>
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+        
+        <!-- Control Panel Card -->
+        <div class="card">
+            <h2>🎮 Emergency Control Panel</h2>
+            <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%); padding: 15px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #ff8800;">
+                <p style="font-weight: bold; color: #664d00; font-size: 1.1em;">
+                    ⚠️ MANUAL MODE - Green stays ON until you press STOP
+                </p>
+            </div>
+            
+            <div class="button-grid">
+                <button class="btn btn-green" id="lane1Start" onclick="controlLane('lane1', 'start')">
+                    🚑 Lane 1 START Green
+                </button>
+                <button class="btn btn-red" id="lane1Stop" onclick="controlLane('lane1', 'stop')" disabled>
+                    🛑 Lane 1 STOP Green
+                </button>
+                <button class="btn btn-green" id="lane2Start" onclick="controlLane('lane2', 'start')">
+                    🚑 Lane 2 START Green
+                </button>
+                <button class="btn btn-red" id="lane2Stop" onclick="controlLane('lane2', 'stop')" disabled>
+                    🛑 Lane 2 STOP Green
+                </button>
+                <button class="btn btn-blue" onclick="refreshData()">
+                    🔄 Refresh
+                </button>
+                <button class="btn btn-purple" onclick="testConnection()">
+                    📡 Test Connection
+                </button>
+                <button class="btn btn-orange" onclick="resetSystem()">
+                    ⚡ Reset System
+                </button>
+                <button class="btn" style="background: linear-gradient(135deg, #2c3e50 0%, #1a252f 100%);" onclick="clearLog()">
+                    🗑️ Clear Log
+                </button>
+            </div>
+            
+            <div style="margin-top: 15px; text-align: center; color: #666;">
+                <small>Hardware pins: Lane1(R=26,Y=27,G=14) | Lane2(R=25,Y=33,G=32)</small>
+            </div>
+        </div>
+        
+        <div class="dashboard-grid">
+            <!-- Statistics Card -->
+            <div class="card">
+                <h2>📈 System Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalPreemptions">0</div>
+                        <div class="stat-label">Preemptions</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="uptime">0s</div>
+                        <div class="stat-label">Uptime</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="dataPoints">0</div>
+                        <div class="stat-label">Data Points</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="activeLaneStat">None</div>
+                        <div class="stat-label">Active Lane</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Event Log Card -->
+            <div class="card">
+                <h2>📋 Live Event Log</h2>
+                <div id="eventLog" class="log-container">
+                    <div class="log-entry">
+                        <span class="time">System</span> 🚀 Dashboard initialized
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Historical Chart Card -->
+        <div class="card">
+            <h2>📊 Historical Data</h2>
+            <div style="margin-bottom: 20px; display: flex; gap: 15px; align-items: center;">
+                <select id="historyPeriod" onchange="loadHistory()" style="padding: 10px; border-radius: 8px; border: 2px solid #667eea; background: white;">
+                    <option value="hour">Last Hour</option>
+                    <option value="day" selected>Last 24 Hours</option>
+                    <option value="week">Last Week</option>
+                </select>
+                <span class="badge badge-info">Preemption Events Timeline</span>
+            </div>
+            <canvas id="historyChart" style="height: 300px; width: 100%;"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // ============= CONFIGURATION =============
+        const ESP32_IP = '10.187.244.198';  // Your ESP32 IP
+        const ESP32_URL = `http://${ESP32_IP}`;
+        
+        // ============= MAP INITIALIZATION =============
+        var map = L.map('map').setView([12.9716, 77.5946], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Custom markers
+        var vehicleIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '🚑',
+            iconSize: [30, 30],
+            popupAnchor: [0, -15]
+        });
+        
+        var trafficIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '🚦',
+            iconSize: [30, 30],
+            popupAnchor: [0, -15]
+        });
+        
+        var vehicleMarker = L.marker([12.9716, 77.5946], {icon: vehicleIcon}).addTo(map)
+            .bindPopup('🚑 Emergency Vehicle');
+        var trafficMarker = L.marker([12.9717, 77.5947], {icon: trafficIcon}).addTo(map)
+            .bindPopup('🚦 Traffic Light');
+        
+        // ============= CHART INITIALIZATION =============
+        var ctx = document.getElementById('historyChart').getContext('2d');
+        var historyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Preemption Events',
+                    data: [],
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#667eea',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'top' }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { stepSize: 1, precision: 0 },
+                        grid: { color: 'rgba(0,0,0,0.1)' }
+                    },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+        
+        // ============= SYSTEM VARIABLES =============
+        let startTime = Date.now();
+        let lastMode = 'NORMAL';
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        
+        // ============= UPDATE DASHBOARD =============
+        setInterval(updateDashboard, 2000);
+        
+        function updateDashboard() {
+            fetch(`${ESP32_URL}/api/status`)
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    // Update connection status
+                    document.getElementById('connectionDot').className = 'connection-status connected';
+                    document.getElementById('connectionStatus').className = 'badge badge-success';
+                    reconnectAttempts = 0;
+                    
+                    // Update Lane 1
+                    document.getElementById('l1-red').classList.toggle('active', data.lane1.red == 1);
+                    document.getElementById('l1-yellow').classList.toggle('active', data.lane1.yellow == 1);
+                    document.getElementById('l1-green').classList.toggle('active', data.lane1.green == 1);
+                    
+                    // Update Lane 2
+                    document.getElementById('l2-red').classList.toggle('active', data.lane2.red == 1);
+                    document.getElementById('l2-yellow').classList.toggle('active', data.lane2.yellow == 1);
+                    document.getElementById('l2-green').classList.toggle('active', data.lane2.green == 1);
+                    
+                    // Update emergency banner
+                    let banner = document.getElementById('emergencyBanner');
+                    let activeLaneSpan = document.getElementById('activeLane');
+                    
+                    if (data.lane1Forced) {
+                        banner.style.display = 'block';
+                        activeLaneSpan.textContent = '1';
+                        document.getElementById('lane1Start').disabled = true;
+                        document.getElementById('lane1Stop').disabled = false;
+                        document.getElementById('lane2Start').disabled = true;
+                        document.getElementById('lane2Stop').disabled = true;
+                        if (lastMode !== 'FORCED_LANE1') {
+                            addLogEntry('🚨 EMERGENCY: Lane 1 GREEN (manual hold)', 'danger');
+                            lastMode = 'FORCED_LANE1';
+                        }
+                    } 
+                    else if (data.lane2Forced) {
+                        banner.style.display = 'block';
+                        activeLaneSpan.textContent = '2';
+                        document.getElementById('lane1Start').disabled = true;
+                        document.getElementById('lane1Stop').disabled = true;
+                        document.getElementById('lane2Start').disabled = true;
+                        document.getElementById('lane2Stop').disabled = false;
+                        if (lastMode !== 'FORCED_LANE2') {
+                            addLogEntry('🚨 EMERGENCY: Lane 2 GREEN (manual hold)', 'danger');
+                            lastMode = 'FORCED_LANE2';
+                        }
+                    }
+                    else {
+                        banner.style.display = 'none';
+                        document.getElementById('lane1Start').disabled = false;
+                        document.getElementById('lane1Stop').disabled = true;
+                        document.getElementById('lane2Start').disabled = false;
+                        document.getElementById('lane2Stop').disabled = true;
+                        if (lastMode !== 'NORMAL') {
+                            addLogEntry('✅ Normal cycle resumed', 'success');
+                            lastMode = 'NORMAL';
+                        }
+                    }
+                    
+                    // Update stats
+                    document.getElementById('totalPreemptions').textContent = data.totalPreemptions || 0;
+                    document.getElementById('uptime').textContent = data.uptime + 's';
+                    document.getElementById('dataPoints').textContent = data.totalPreemptions * 2 || 0;
+                    document.getElementById('activeLaneStat').textContent = 
+                        data.lane1Forced ? 'Lane 1' : (data.lane2Forced ? 'Lane 2' : 'None');
+                    
+                    // Update simulated GPS (for demo)
+                    let simLat = 12.9716 + (Math.random() - 0.5) * 0.001;
+                    let simLng = 77.5946 + (Math.random() - 0.5) * 0.001;
+                    document.getElementById('gpsLat').textContent = simLat.toFixed(6);
+                    document.getElementById('gpsLng').textContent = simLng.toFixed(6);
+                    document.getElementById('gpsTime').textContent = new Date().toLocaleTimeString();
+                    
+                    // Update map markers
+                    vehicleMarker.setLatLng([simLat, simLng]);
+                    trafficMarker.setLatLng([12.9717, 77.5947]);
+                    map.setView([simLat, simLng], 15);
+                })
+                .catch(error => {
+                    console.error('Connection error:', error);
+                    document.getElementById('connectionDot').className = 'connection-status disconnected';
+                    document.getElementById('connectionStatus').className = 'badge badge-danger';
+                    
+                    reconnectAttempts++;
+                    if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+                        addLogEntry(`⚠️ Connection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`, 'warning');
+                    } else {
+                        addLogEntry('❌ ESP32 disconnected - check power and WiFi', 'error');
+                    }
+                });
+        }
+        
+        // ============= CONTROL FUNCTIONS =============
+        function controlLane(lane, action) {
+            const button = document.getElementById(`${lane}${action === 'start' ? 'Start' : 'Stop'}`);
+            button.disabled = true;
+            
+            fetch(`${ESP32_URL}/api/${lane}/${action}`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.text();
+            })
+            .then(msg => {
+                addLogEntry(`👆 ${lane.toUpperCase()} ${action} - ${msg}`);
+                updateDashboard();
+            })
+            .catch(err => {
+                console.error('Control error:', err);
+                addLogEntry(`❌ Failed to ${action} ${lane}`, 'error');
+                alert(`Error: Cannot connect to ESP32\n\nMake sure ESP32 is powered and IP is correct: ${ESP32_IP}`);
+                button.disabled = false;
+            });
+        }
+        
+        // ============= LOGGING =============
+        function addLogEntry(message, type = 'info') {
+            let log = document.getElementById('eventLog');
+            let entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            let icon = '📝';
+            if (type === 'danger') icon = '🚨';
+            if (type === 'error') icon = '❌';
+            if (type === 'warning') icon = '⚠️';
+            if (type === 'success') icon = '✅';
+            
+            let timeStr = new Date().toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            entry.innerHTML = `<span class="time">[${timeStr}]</span> ${icon} ${message}`;
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep last 50 entries
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+        
+        // ============= UTILITY FUNCTIONS =============
+        function refreshData() {
+            addLogEntry('🔄 Manual refresh');
+            updateDashboard();
+        }
+        
+        function testConnection() {
+            fetch(`${ESP32_URL}/`)
+                .then(() => {
+                    addLogEntry('✅ Connection test successful');
+                    alert('✅ Connected to ESP32!');
+                })
+                .catch(() => {
+                    addLogEntry('❌ Connection test failed', 'error');
+                    alert(`❌ Cannot connect to ESP32 at ${ESP32_IP}\n\nCheck:\n1. ESP32 is powered\n2. Both devices on same WiFi\n3. IP address is correct`);
+                });
+        }
+        
+        function resetSystem() {
+            if (confirm('⚠️ Reset all counters?\nThis will clear preemption count and logs.')) {
+                fetch(`${ESP32_URL}/api/reset`, { method: 'POST' })
+                    .then(() => {
+                        startTime = Date.now();
+                        addLogEntry('⚡ System reset');
+                        updateDashboard();
+                    })
+                    .catch(() => {
+                        addLogEntry('❌ Reset failed', 'error');
+                    });
+            }
+        }
+        
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '';
+            addLogEntry('🗑️ Log cleared');
+        }
+        
+        function loadHistory() {
+            // Generate realistic history data
+            let labels = [];
+            let data = [];
+            let period = document.getElementById('historyPeriod').value;
+            
+            let points = period === 'hour' ? 6 : (period === 'day' ? 12 : 7);
+            let multiplier = period === 'hour' ? 10 : (period === 'day' ? 2 : 24);
+            
+            for (let i = points; i >= 0; i--) {
+                let d = new Date();
+                if (period === 'hour') {
+                    d.setMinutes(d.getMinutes() - (i * 10));
+                    labels.push(d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes());
+                } else if (period === 'day') {
+                    d.setHours(d.getHours() - (i * 2));
+                    labels.push(d.getHours() + ':00');
+                } else {
+                    d.setDate(d.getDate() - i);
+                    labels.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
+                }
+                data.push(Math.floor(Math.random() * 4)); // Random 0-3 events
+            }
+            
+            historyChart.data.labels = labels;
+            historyChart.data.datasets[0].data = data;
+            historyChart.update();
+        }
+        
+        // ============= INITIALIZATION =============
+        function initialize() {
+            addLogEntry('🚀 Dashboard initialized - MANUAL GREEN HOLD mode');
+            addLogEntry(`🔌 ESP32 Target: ${ESP32_IP}`);
+            loadHistory();
+            updateDashboard();
+        }
+        
+        // Start everything
+        initialize();
+    </script>
+</body>
+</html>
